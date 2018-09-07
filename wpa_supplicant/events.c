@@ -4014,9 +4014,9 @@ void wpa_supplicant_event(void *ctx, enum wpa_event_type event,
 		wpas_notify_assoc_status_code(wpa_s);
 
 #ifdef CONFIG_SAE
-		if (wpa_key_mgmt_sae(wpa_s->current_ssid->key_mgmt) &&
-		    !data->assoc_reject.timed_out &&
-		    wpa_s->current_ssid) {
+		if (wpa_s->current_ssid &&
+		    wpa_key_mgmt_sae(wpa_s->current_ssid->key_mgmt) &&
+		    !data->assoc_reject.timed_out) {
 			wpa_dbg(wpa_s, MSG_DEBUG,
 				"SAE: drop PMKSA cache entry");
 			wpa_sm_aborted_cached(wpa_s->wpa);
