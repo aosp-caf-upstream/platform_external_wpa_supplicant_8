@@ -4061,7 +4061,17 @@ void wpa_supplicant_event(void *ctx, enum wpa_event_type event,
 			}
 		}
 #endif /* CONFIG_OWE */
-
+#ifdef CONFIG_DPP
+		if (wpa_s->current_ssid &&
+		    wpa_s->current_ssid->key_mgmt == WPA_KEY_MGMT_DPP &&
+		    !data->assoc_reject.timed_out) {
+			wpa_dbg(wpa_s, MSG_DEBUG,
+				"DPP: drop PMKSA cache entry");
+			wpa_sm_aborted_cached(wpa_s->wpa);
+			wpa_sm_pmksa_cache_flush(wpa_s->wpa,
+						 wpa_s->current_ssid);
+		}
+#endif
 		if (wpa_s->drv_flags & WPA_DRIVER_FLAGS_SME)
 			sme_event_assoc_reject(wpa_s, data);
 		else {
