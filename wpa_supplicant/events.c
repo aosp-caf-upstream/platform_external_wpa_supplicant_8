@@ -4079,10 +4079,12 @@ void wpa_supplicant_event(void *ctx, enum wpa_event_type event,
 
 #ifdef CONFIG_FILS
 			/* Update ERP next sequence number */
-			if (wpa_s->auth_alg == WPA_AUTH_ALG_FILS)
+			if (wpa_s->auth_alg == WPA_AUTH_ALG_FILS) {
 				eapol_sm_update_erp_next_seq_num(
 				      wpa_s->eapol,
 				      data->assoc_reject.fils_erp_next_seq_num);
+				fils_connection_failure(wpa_s);
+			}
 #endif /* CONFIG_FILS */
 
 			if (bssid == NULL || is_zero_ether_addr(bssid))
