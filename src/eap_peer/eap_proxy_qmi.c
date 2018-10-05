@@ -924,7 +924,7 @@ static void eap_proxy_qmi_deinit(struct eap_proxy_sm *eap_proxy)
 {
         int qmiRetCode;
         int index;
-        wpa_uim_struct_type *wpa_uim = eap_proxy->wpa_uim;
+        wpa_uim_struct_type *wpa_uim = NULL;
 
         if (NULL == eap_proxy)
                 return;
@@ -934,6 +934,7 @@ static void eap_proxy_qmi_deinit(struct eap_proxy_sm *eap_proxy)
          */
         pthread_join(eap_proxy->thread_id, NULL);
         eap_proxy->proxy_state = EAP_PROXY_DISABLED;
+        wpa_uim = eap_proxy->wpa_uim;
 
         for (index = 0; index < MAX_NO_OF_SIM_SUPPORTED; ++index) {
                 if (TRUE == eap_proxy->eap_auth_session_flag[index]) {
