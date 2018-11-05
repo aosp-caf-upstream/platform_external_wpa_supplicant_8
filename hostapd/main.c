@@ -33,6 +33,11 @@
 #include "hidl.h"
 #endif /* CONFIG_CTRL_IFACE_HIDL */
 
+#ifdef ANDROID
+#include "wpa_debug.h"
+#include <cutils/properties.h>
+#endif /* ANDROID */
+
 struct hapd_global {
 	void **drv_priv;
 	size_t drv_count;
@@ -816,6 +821,20 @@ int main(int argc, char *argv[])
 	if (!fst_global_add_ctrl(fst_ctrl_cli))
 		wpa_printf(MSG_WARNING, "Failed to add CLI FST ctrl");
 #endif /* CONFIG_FST && CONFIG_CTRL_IFACE */
+
+    wpa_printf(MSG_ERROR, "debug, set loglevel");
+#ifdef ANDROID
+	char ifprop[PROPERTY_VALUE_MAX];
+	if (property_get("vendor.qcom.wifi.debug", ifprop, "0") != 0) {
+		wpa_printf(MSG_ERROR, "debug, ifprop = %s",ifprop);
+		if (os_strcmp("1",ifprop) == 0) {
+			set_log_level(1);
+		}
+		else {
+			set_log_level(0);
+		}
+	}
+#endif /* ANDROID */
 
 	/* Allocate and parse configuration for full interface files */
 	for (i = 0; i < interfaces.count; i++) {
