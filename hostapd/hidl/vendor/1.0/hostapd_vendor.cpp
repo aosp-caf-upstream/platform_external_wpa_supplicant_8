@@ -73,11 +73,24 @@ int qsap_cmd(std::string cmd) {
 	char *data[max_arg_size];
 	char **argv = data;
 	int argc = 0;
+	int index = 0;
+	std::string subcmd;
+	std::string subval;
 
 	wpa_printf(MSG_DEBUG, "qsap command: %s", cmd.c_str());
 
+	/* spit the input into two parts by '=' */
+	/* e.g. softap qccmd set wpa_passphrase=12345678 */
+	index = cmd.find('=');
+	if (index > 0) {
+		subcmd = cmd.substr(0, index);
+		subval = cmd.substr(index);
+	} else {
+		subcmd = cmd;
+	}
+
 	/* Tokenize command to char array */
-	std::istringstream buf(cmd);
+	std::istringstream buf(subcmd);
 	std::istream_iterator<std::string> beg(buf), end;
 	std::vector<std::string> tokens(beg, end);
 
@@ -88,6 +101,13 @@ int qsap_cmd(std::string cmd) {
 		}
 		data[argc] = strdup(s.c_str());
 		argc++;
+	}
+
+	/* Append the subval to last argc of data */
+	if (index > 0 && argc > 0) {
+		std::string subkey(data[argc-1]);
+		free(data[argc-1]);
+		data[argc-1] = strdup((subkey + subval).c_str());
 	}
 
 	if (run_qsap_cmd(argc, argv)) {
