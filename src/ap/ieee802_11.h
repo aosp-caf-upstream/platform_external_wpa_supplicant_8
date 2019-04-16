@@ -166,4 +166,6 @@ int ieee802_11_allowed_address(struct hostapd_data *hapd, const u8 *addr,
 			       char **identity, char **radius_cui,
 			       int is_probe_req);
 
+void auth_sae_process_commit(void *eloop_ctx, void *user_ctx);
+
 #endif /* IEEE802_11_H */
