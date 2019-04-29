@@ -39,6 +39,7 @@ struct sae_temporary_data {
 	struct crypto_bignum *prime_buf;
 	struct crypto_bignum *order_buf;
 	struct wpabuf *anti_clogging_token;
+	u8 bssid[ETH_ALEN];
 };
 
 enum sae_state {
