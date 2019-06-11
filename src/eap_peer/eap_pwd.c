@@ -344,7 +344,7 @@ eap_pwd_perform_commit_exchange(struct eap_sm *sm, struct eap_pwd_data *data,
 				const struct wpabuf *reqData,
 				const u8 *payload, size_t payload_len)
 {
-	struct crypto_ec_point *K = NULL, *point = NULL;
+	struct crypto_ec_point *K = NULL;
 	struct crypto_bignum *mask = NULL, *cofactor = NULL;
 	const u8 *ptr;
 	u8 *scalar = NULL, *element = NULL;
@@ -413,8 +413,7 @@ eap_pwd_perform_commit_exchange(struct eap_sm *sm, struct eap_pwd_data *data,
 	/* process the request */
 	data->k = crypto_bignum_init();
 	K = crypto_ec_point_init(data->grp->group);
-	point = crypto_ec_point_init(data->grp->group);
-	if (!data->k || !K || !point) {
+	if (!data->k || !K) {
 		wpa_printf(MSG_INFO, "EAP-PWD (peer): peer data allocation "
 			   "fail");
 		goto fin;
@@ -422,33 +421,18 @@ eap_pwd_perform_commit_exchange(struct eap_sm *sm, struct eap_pwd_data *data,
 
 	/* element, x then y, followed by scalar */
 	ptr = payload;
-	data->server_element = crypto_ec_point_from_bin(data->grp->group, ptr);
+	data->server_element = eap_pwd_get_element(data->grp, ptr);
 	if (!data->server_element) {
 		wpa_printf(MSG_INFO, "EAP-PWD (peer): setting peer element "
 			   "fail");
 		goto fin;
 	}
 	ptr += prime_len * 2;
-	data->server_scalar = crypto_bignum_init_set(ptr, order_len);
+	data->server_scalar = eap_pwd_get_scalar(data->grp, ptr);
 	if (!data->server_scalar) {
 		wpa_printf(MSG_INFO,
 			   "EAP-PWD (peer): setting peer scalar fail");
 		goto fin;
-	}
-
-	/* check to ensure server's element is not in a small sub-group */
-	if (!crypto_bignum_is_one(cofactor)) {
-		if (crypto_ec_point_mul(data->grp->group, data->server_element,
-					cofactor, point) < 0) {
-			wpa_printf(MSG_INFO, "EAP-PWD (peer): cannot multiply "
-				   "server element by order!\n");
-			goto fin;
-		}
-		if (crypto_ec_point_is_at_infinity(data->grp->group, point)) {
-			wpa_printf(MSG_INFO, "EAP-PWD (peer): server element "
-				   "is at infinity!\n");
-			goto fin;
-		}
 	}
 
 	/* compute the shared key, k */
@@ -524,7 +508,6 @@ fin:
 	crypto_bignum_deinit(mask, 1);
 	crypto_bignum_deinit(cofactor, 1);
 	crypto_ec_point_deinit(K, 1);
-	crypto_ec_point_deinit(point, 1);
 	if (data->outbuf == NULL)
 		eap_pwd_state(data, FAILURE);
 	else
@@ -822,6 +805,13 @@ eap_pwd_process(struct eap_sm *sm, void *priv, struct eap_method_ret *ret,
 	 * buffer and ACK the fragment
 	 */
 	if (EAP_PWD_GET_MORE_BIT(lm_exch) || data->in_frag_pos) {
+		if (!data->inbuf) {
+			wpa_printf(MSG_DEBUG,
+				   "EAP-pwd: No buffer for reassembly");
+			ret->methodState = METHOD_DONE;
+			ret->decision = DECISION_FAIL;
+			return NULL;
+		}
 		data->in_frag_pos += len;
 		if (data->in_frag_pos > wpabuf_size(data->inbuf)) {
 			wpa_printf(MSG_INFO, "EAP-pwd: Buffer overflow attack "
@@ -848,7 +838,7 @@ eap_pwd_process(struct eap_sm *sm, void *priv, struct eap_method_ret *ret,
 	/*
 	 * we're buffering and this is the last fragment
 	 */
-	if (data->in_frag_pos) {
+	if (data->in_frag_pos && data->inbuf) {
 		wpa_printf(MSG_DEBUG, "EAP-pwd: Last fragment, %d bytes",
 			   (int) len);
 		pos = wpabuf_head_u8(data->inbuf);
