@@ -50,6 +50,7 @@ struct eap_pwd_id {
 } STRUCT_PACKED;
 
 /* common routines */
+EAP_PWD_group * get_eap_pwd_group(u16 num);
 int compute_password_element(EAP_PWD_group *grp, u16 num,
 			     const u8 *password, size_t password_len,
 			     const u8 *id_server, size_t id_server_len,
@@ -63,5 +64,8 @@ int compute_keys(EAP_PWD_group *grp, const struct crypto_bignum *k,
 struct crypto_hash * eap_pwd_h_init(void);
 void eap_pwd_h_update(struct crypto_hash *hash, const u8 *data, size_t len);
 void eap_pwd_h_final(struct crypto_hash *hash, u8 *digest);
+struct crypto_ec_point * eap_pwd_get_element(EAP_PWD_group *group,
+					     const u8 *buf);
+struct crypto_bignum * eap_pwd_get_scalar(EAP_PWD_group *group, const u8 *buf);
 
 #endif  /* EAP_PWD_COMMON_H */
