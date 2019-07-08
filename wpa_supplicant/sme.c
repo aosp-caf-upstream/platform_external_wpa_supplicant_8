@@ -56,7 +56,7 @@ static int index_within_array(const int *array, int idx)
 static int sme_set_sae_group(struct wpa_supplicant *wpa_s)
 {
 	int *groups = wpa_s->conf->sae_groups;
-	int default_groups[] = { 19, 20, 21, 25, 26, 0 };
+	int default_groups[] = { 19, 20, 21, 0 };
 
 	if (!groups || groups[0] <= 0)
 		groups = default_groups;
@@ -83,7 +83,8 @@ static int sme_set_sae_group(struct wpa_supplicant *wpa_s)
 
 static struct wpabuf * sme_auth_build_sae_commit(struct wpa_supplicant *wpa_s,
 						 struct wpa_ssid *ssid,
-						 const u8 *bssid, int external)
+						 const u8 *bssid, int external,
+						 int reuse)
 {
 	struct wpabuf *buf;
 	size_t len;
@@ -110,6 +111,12 @@ static struct wpabuf * sme_auth_build_sae_commit(struct wpa_supplicant *wpa_s,
 		return NULL;
 	}
 
+	if (reuse && wpa_s->sme.sae.tmp &&
+	    os_memcmp(bssid, wpa_s->sme.sae.tmp->bssid, ETH_ALEN) == 0) {
+		wpa_printf(MSG_DEBUG,
+			   "SAE: Reuse previously generated PWE on a retry with the same AP");
+		goto reuse_data;
+	}
 	if (sme_set_sae_group(wpa_s) < 0) {
 		wpa_printf(MSG_DEBUG, "SAE: Failed to select group");
 		return NULL;
@@ -117,12 +124,18 @@ static struct wpabuf * sme_auth_build_sae_commit(struct wpa_supplicant *wpa_s,
 
 	if (sae_prepare_commit(wpa_s->own_addr, bssid,
 			       (u8 *) password, os_strlen(password),
+			       ssid->sae_password_id,
 			       &wpa_s->sme.sae) < 0) {
 		wpa_printf(MSG_DEBUG, "SAE: Could not pick PWE");
 		return NULL;
 	}
+	if (wpa_s->sme.sae.tmp)
+		os_memcpy(wpa_s->sme.sae.tmp->bssid, bssid, ETH_ALEN);
 
+reuse_data:
 	len = wpa_s->sme.sae_token ? wpabuf_len(wpa_s->sme.sae_token) : 0;
+	if (ssid->sae_password_id)
+		len += 4 + os_strlen(ssid->sae_password_id);
 	buf = wpabuf_alloc(4 + SAE_COMMIT_MAX_LEN + len);
 	if (buf == NULL)
 		return NULL;
@@ -130,7 +143,8 @@ static struct wpabuf * sme_auth_build_sae_commit(struct wpa_supplicant *wpa_s,
 		wpabuf_put_le16(buf, 1); /* Transaction seq# */
 		wpabuf_put_le16(buf, WLAN_STATUS_SUCCESS);
 	}
-	sae_write_commit(&wpa_s->sme.sae, buf, wpa_s->sme.sae_token);
+	sae_write_commit(&wpa_s->sme.sae, buf, wpa_s->sme.sae_token,
+			 ssid->sae_password_id);
 
 	return buf;
 }
@@ -558,7 +572,8 @@ static void sme_send_authentication(struct wpa_supplicant *wpa_s,
 	if (!skip_auth && params.auth_alg == WPA_AUTH_ALG_SAE) {
 		if (start)
 			resp = sme_auth_build_sae_commit(wpa_s, ssid,
-							 bss->bssid, 0);
+							 bss->bssid, 0,
+							 start == 2);
 		else
 			resp = sme_auth_build_sae_confirm(wpa_s, 0);
 		if (resp == NULL) {
@@ -841,7 +856,7 @@ static void sme_external_auth_send_sae_commit(struct wpa_supplicant *wpa_s,
 {
 	struct wpabuf *resp, *buf;
 
-	resp = sme_auth_build_sae_commit(wpa_s, ssid, bssid, 1);
+	resp = sme_auth_build_sae_commit(wpa_s, ssid, bssid, 1, 0);
 	if (!resp)
 		return;
 
@@ -963,7 +978,7 @@ static int sme_sae_auth(struct wpa_supplicant *wpa_s, u16 auth_transaction,
 	    status_code == WLAN_STATUS_ANTI_CLOGGING_TOKEN_REQ &&
 	    wpa_s->sme.sae.state == SAE_COMMITTED &&
 	    (external || wpa_s->current_bss) && wpa_s->current_ssid) {
-		int default_groups[] = { 19, 20, 21, 25, 26, 0 };
+		int default_groups[] = { 19, 20, 21, 0 };
 		u16 group;
 
 		groups = wpa_s->conf->sae_groups;
@@ -991,7 +1006,7 @@ static int sme_sae_auth(struct wpa_supplicant *wpa_s, u16 auth_transaction,
 							 len - sizeof(le16));
 		if (!external)
 			sme_send_authentication(wpa_s, wpa_s->current_bss,
-						wpa_s->current_ssid, 1);
+						wpa_s->current_ssid, 2);
 		else
 			sme_external_auth_send_sae_commit(
 				wpa_s, wpa_s->sme.ext_auth.bssid,
@@ -1016,6 +1031,16 @@ static int sme_sae_auth(struct wpa_supplicant *wpa_s, u16 auth_transaction,
 				wpa_s, wpa_s->sme.ext_auth.bssid,
 				wpa_s->current_ssid);
 		return 0;
+	}
+
+	if (auth_transaction == 1 &&
+	    status_code == WLAN_STATUS_UNKNOWN_PASSWORD_IDENTIFIER) {
+		const u8 *bssid = sa ? sa : wpa_s->pending_bssid;
+
+		wpa_msg(wpa_s, MSG_INFO,
+			WPA_EVENT_SAE_UNKNOWN_PASSWORD_IDENTIFIER MACSTR,
+			MAC2STR(bssid));
+		return -1;
 	}
 
 	if (status_code != WLAN_STATUS_SUCCESS)
